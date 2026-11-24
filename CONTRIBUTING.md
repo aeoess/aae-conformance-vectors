@@ -4,7 +4,7 @@
 
 This repository accepts:
 
-- AAE conformance vectors — additions to or refinements of the core 18-vector
+- AAE conformance vectors — additions to or refinements of the core 22-vector
   suite covering delegation, revocation, validity, and cycle detection
 - Cross-spec contributions — vectors authored against AAE semantics by
   implementers of related specs (APS, x402, action_ref, etc.), filed under
@@ -70,8 +70,16 @@ For specs other than AAE (APS, x402, action_ref, etc.):
    ```
    python3 -m pytest tests/
    ```
+   For a change to the runners (`runner/`) or the adapters (`adapters/`), run both
+   runners against the reference adapter and their tests (CI runs them too):
+   ```
+   PYTHONPATH=runner/python python3 -m aae_conformance --impl "python3 adapters/python-reference/adapter.py"
+   python3 -m pytest runner/python/tests/
+   (cd runner/ts && npm ci && npm run build && npm test)
+   node runner/ts/dist/cli.js --impl "python3 adapters/python-reference/adapter.py"
+   ```
 3. Open PR against `main`
-4. CI must pass (schema-validate + verifier 18/18 + byte-identical rebuild check)
+4. CI must pass (schema-validate + verifier 22/22 + byte-identical rebuild check)
 5. Reviewer: @MoltyCel
 6. Squash-merge is default
 

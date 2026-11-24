@@ -4,7 +4,7 @@ This guide connects your own AAE implementation to the vectors and runs it. You 
 small adapter that turns a request from the runner into a call into your code; a runner
 sends every vector through it and tells you which ones pass.
 
-- 19 native vectors, `vectors/*.json`: the Section 5 nine-step verification of a signed
+- 22 native vectors, `vectors/*.json`: the Section 5 nine-step verification of a signed
   AAE, built against
   [draft-kroehl-agentic-trust-aae-00](https://datatracker.ietf.org/doc/draft-kroehl-agentic-trust-aae/00/).
 - 26 enforce vectors, `vectors/enforce/*.json`: the enforce kernel (grants, constraint
@@ -82,7 +82,7 @@ first run shows every vector as failed with that message. That confirms the wiri
 A complete adapter, the one CI runs, is
 [`adapters/python-reference/adapter.py`](../adapters/python-reference/adapter.py). It puts
 the two reference verifiers (`examples/python-verify.py`, `examples/enforce-verify.py`)
-behind the protocol and passes all 87.
+behind the protocol and passes all 90.
 
 ## 3. Run
 
@@ -120,10 +120,10 @@ The reference adapter, through the Python runner:
     PASS  resume   R03-P1-initial-policy-epoch.json                           ACCEPT @ step 8
     ...
 
-    native   19/19 passed
+    native   22/22 passed
     enforce  26/26 passed
     resume   42/42 passed
-    87/87 passed
+    90/90 passed
 
 A failing vector lists every mismatch under it:
 
@@ -243,7 +243,7 @@ revisions of the draft:
 
 | You pass | You may state |
 |---|---|
-| native 19/19 | conforms to the Section 5 verification algorithm of draft-kroehl-agentic-trust-aae-00, as tested by the native vectors |
+| native 22/22 | conforms to the Section 5 verification algorithm of draft-kroehl-agentic-trust-aae-00, as tested by the native vectors |
 | enforce 26/26 | conforms to the enforce kernel of draft-kroehl-agentic-trust-aae-02 (kernel 3.0), as tested by the enforce vectors |
 | resume 42/42 | decides the admission and repeat-dispatch presentations of the 14 resume schedules as draft-kroehl-agentic-trust-aae-02 does; it says nothing about the history outcome, which -02 leaves unspecified in 30 of the 42 cells |
 

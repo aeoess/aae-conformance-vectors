@@ -259,6 +259,21 @@ def _without_required(constraint: dict) -> dict:
     return {k: v for k, v in constraint.items() if k != "required"}
 
 
+def _json_equal(a, b) -> bool:
+    """Equality of two parsed JSON values by JSON type. Python's == treats
+    True as 1 and False as 0, but in JSON true and 1 are different values, so
+    an unrecognized constraint that changes one into the other has changed."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_json_equal(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_json_equal(x, y) for x, y in zip(a, b))
+    return type(a) is type(b) and a == b
+
+
 def check_link(child_vc: dict, parent_vc: dict, step: int = 9,
                child_node: int | None = None, parent_node: int | None = None) -> None:
     """§3 monotonicity + depth rules for one delegation link.
@@ -336,7 +351,7 @@ def check_link(child_vc: dict, parent_vc: dict, step: int = 9,
         # except `required` must match. `required` itself is defined by -00
         # §2.3, so changing it from false to true is a known tightening. The
         # opposite change is rejected above as required_parent_constraint_dropped.
-        if ctype not in RECOGNIZED_CONSTRAINTS and _without_required(c) != _without_required(p):
+        if ctype not in RECOGNIZED_CONSTRAINTS and not _json_equal(_without_required(c), _without_required(p)):
             raise Reject(step, "delegated_unrecognized_constraint_differs")
         if ctype in CURRENCY_VALUED and c.get("currency") != p.get("currency"):
             raise Reject(step, "delegation_currency_mismatch")

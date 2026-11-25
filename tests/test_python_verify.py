@@ -501,6 +501,35 @@ def test_unrecognized_constraint_required_per_link(parent, child, reason):
     assert _link_result(vcs[1], vcs[0]) == reason
 
 
+@pytest.mark.parametrize("parent_value, child_value, reason", [
+    (True, 1, "delegated_unrecognized_constraint_differs"),
+    (False, 0, "delegated_unrecognized_constraint_differs"),
+    ([False], [0], "delegated_unrecognized_constraint_differs"),
+    ({"on": True}, {"on": 1}, "delegated_unrecognized_constraint_differs"),
+    (1, True, "delegated_unrecognized_constraint_differs"),
+    ("1", 1, "delegated_unrecognized_constraint_differs"),
+    (None, False, "delegated_unrecognized_constraint_differs"),
+    # 1 and 1.0 are the same JSON number
+    (1, 1.0, None),
+    (True, True, None),
+    ([{"on": False}], [{"on": False}], None),
+], ids=["true-to-1", "false-to-0", "list-false-to-0", "nested-true-to-1", "1-to-true",
+        "string-to-number", "null-to-false", "int-to-float", "same-bool", "same-nested"])
+def test_unrecognized_constraint_value_compared_by_json_type(parent_value, child_value, reason):
+    """Python's == says True == 1 and False == 0. JSON does not, so an
+    unrecognized constraint whose value changes JSON type has changed."""
+    vcs, _ = _resource_chain([_resource(False, parent_value), _resource(False, child_value)])
+    assert _link_result(vcs[1], vcs[0]) == reason
+
+
+def test_unrecognized_bool_to_number_rejected_end_to_end():
+    """The same change through verify(): optional on every AAE, so step 7
+    ignores it, and step 9 rejects the changed value."""
+    _, jws = _resource_chain([_resource(False, True), _resource(False, 1)])
+    got = verifier.verify(jws[-1], _context(delegation_chain=jws[:-1]))
+    assert got == _reject(9, "delegated_unrecognized_constraint_differs")
+
+
 def test_unrecognized_tightening_on_middle_link_passes_every_link():
     """A three-link chain where only the middle link (depth 1 -> depth 2)
     changes `required` from false to true. check_link accepts every link,

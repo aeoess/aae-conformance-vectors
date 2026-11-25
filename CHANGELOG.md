@@ -15,7 +15,8 @@ described under "Release history" in [README.md](README.md#versioning).
     `delegated_unrecognized_constraint_differs`. The verifier cannot determine that the
     child is equal to or more restrictive. The `required` member is compared by the
     -00 §3 required rule, not as part of the value, so a change from `required: false`
-    to `required: true` passes this check. The check runs on every link of the chain.
+    to `required: true` passes this check. Values are compared by JSON type, so `true`
+    and `1` differ. The check runs on every link of the chain.
   - A delegated `rate_limit` above the parent's value now rejects with
     `delegated_constraint_relaxed`. One whose `window` differs from the parent's rejects
     with the new code `delegation_rate_limit_window_mismatch`.

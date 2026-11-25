@@ -125,7 +125,8 @@ constraint type the verifier does not recognize is present in parent and child w
 different values, so the verifier cannot determine that the child is equal to or
 more restrictive (-00 §3). The `required` member is not part of the value: -00 §2.3
 defines it, so a change from `required: false` to `required: true` is a known
-tightening and passes this check. The name is provisional. Vector 21 uses
+tightening and passes this check. Values are compared by JSON type, so `true` and
+`1` differ although Python's `==` treats them as equal. The name is provisional. Vector 21 uses
 `delegated_constraint_relaxed` and vector 22 `required_parent_constraint_dropped`.
 
 A rejection may carry an optional `detail` string next to `rejection_reason`, for

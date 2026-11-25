@@ -19,7 +19,10 @@ described under "Release history" in [README.md](README.md#versioning).
     and `1` differ. The check runs on every link of the chain.
   - A delegated `rate_limit` above the parent's value now rejects with
     `delegated_constraint_relaxed`. One whose `window` differs from the parent's rejects
-    with the new code `delegation_rate_limit_window_mismatch`.
+    with the new code `delegation_rate_limit_window_mismatch`. A `rate_limit` or
+    `max_transaction_value` whose value is not a finite number in parent or child, such
+    as `true`, `NaN` or a string, rejects with `constraint_unevaluable`, because it
+    cannot be compared.
   - A required parent constraint that the child keeps but marks `required: false` now
     rejects with `required_parent_constraint_dropped`, as an omitted one already did.
 

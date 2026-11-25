@@ -440,7 +440,7 @@ def _resource(required=None, value="repo:acme/*") -> dict:
     return out
 
 
-def _resource_chain(resources: list[dict]) -> tuple[list[dict], list[str]]:
+def _resource_chain(resources: list[dict], extra: list[dict] | None = None) -> tuple[list[dict], list[str]]:
     """registry -> agent-a -> agent-b -> agent-c -> agent-001, cut to len(resources)
     AAEs. resources[i] is the 'resource' constraint of AAE i (0 = root).
     Returns (vcs, jws) in root-first order."""
@@ -450,7 +450,8 @@ def _resource_chain(resources: list[dict]) -> tuple[list[dict], list[str]]:
     ids = [f"urn:uuid:7e571000-0000-4000-8000-0000000000{i:02d}" for i in range(len(resources))]
     vcs, jws = [], []
     for i, resource in enumerate(resources):
-        constraints = {"max_transaction_value": bv.max_tx(500 - 100 * i, "USD"), "resource": resource}
+        constraints = {"max_transaction_value": bv.max_tx(500 - 100 * i, "USD"), "resource": resource,
+                       **(extra[i] if extra else {})}
         validity = {"not_before": bv.NB, "not_after": bv.NA, "single_use": False}
         if i == 0:
             aae = {"mandate": bv.root_mandate(["read"], delegation_policy={"max_depth": max_depth}),
@@ -528,6 +529,45 @@ def test_unrecognized_bool_to_number_rejected_end_to_end():
     _, jws = _resource_chain([_resource(False, True), _resource(False, 1)])
     got = verifier.verify(jws[-1], _context(delegation_chain=jws[:-1]))
     assert got == _reject(9, "delegated_unrecognized_constraint_differs")
+
+
+def _rate(value) -> dict:
+    return {"rate_limit": {"value": value, "window": "PT1H", "required": False}}
+
+
+@pytest.mark.parametrize("parent_value, child_value, reason", [
+    (10, 5, None),
+    (10, 10, None),
+    (10.0, 10, None),
+    (10, 20, "delegated_constraint_relaxed"),
+    # Python counts True as 1, so True passed as a value below 10
+    (10, True, "constraint_unevaluable"),
+    (True, 1, "constraint_unevaluable"),
+    # NaN compares false with everything, so it passed as a tightening
+    (10, float("nan"), "constraint_unevaluable"),
+    (10, float("-inf"), "constraint_unevaluable"),
+    (float("inf"), 10, "constraint_unevaluable"),
+    (10, "5", "constraint_unevaluable"),
+    (10, None, "constraint_unevaluable"),
+], ids=["lower", "equal", "float-equal", "higher", "child-true", "parent-true",
+        "child-nan", "child-minus-inf", "parent-inf", "child-string", "child-null"])
+def test_rate_limit_value_must_be_a_finite_number(parent_value, child_value, reason):
+    """The upper bound comparison only works on finite numbers. A boolean,
+    NaN, an infinity, a string or null cannot be shown to be equal or more
+    restrictive (-00 section 3), so the link rejects."""
+    vcs, _ = _resource_chain([_resource(False), _resource(False)],
+                             extra=[_rate(parent_value), _rate(child_value)])
+    assert _link_result(vcs[1], vcs[0]) == reason
+
+
+@pytest.mark.parametrize("child_value", [True, float("nan")], ids=["true", "nan"])
+def test_rate_limit_non_number_rejected_end_to_end(child_value):
+    """Optional on both AAEs and no rate_count in the context, so step 7 skips
+    it, and step 9 rejects the value it cannot compare."""
+    _, jws = _resource_chain([_resource(False), _resource(False)],
+                             extra=[_rate(10), _rate(child_value)])
+    got = verifier.verify(jws[-1], _context(delegation_chain=jws[:-1]))
+    assert got == _reject(9, "constraint_unevaluable")
 
 
 def test_unrecognized_tightening_on_middle_link_passes_every_link():

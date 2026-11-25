@@ -23,6 +23,7 @@ import base64
 import glob
 import hashlib
 import json
+import math
 import os
 import sys
 from datetime import datetime, timezone
@@ -259,6 +260,13 @@ def _without_required(constraint: dict) -> dict:
     return {k: v for k, v in constraint.items() if k != "required"}
 
 
+def _is_finite_number(v) -> bool:
+    """A JSON number the upper bound comparison can order. bool is excluded
+    because Python counts True as 1, and NaN and the infinities are excluded
+    because JSON has no such values and NaN compares false with everything."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 def _json_equal(a, b) -> bool:
     """Equality of two parsed JSON values by JSON type. Python's == treats
     True as 1 and False as 0, but in JSON true and 1 are different values, so
@@ -359,8 +367,13 @@ def check_link(child_vc: dict, parent_vc: dict, step: int = 9,
         # parent constraint" (-00 §3); its value is checked as an upper bound.
         if ctype == "rate_limit" and c.get("window") != p.get("window"):
             raise Reject(step, "delegation_rate_limit_window_mismatch")
-        if ctype in NUMERIC_UPPER_BOUND and c.get("value", 0) > p.get("value", 0):
-            raise Reject(step, "delegated_constraint_relaxed")
+        if ctype in NUMERIC_UPPER_BOUND:
+            # Only two finite numbers can be shown to be equal or more
+            # restrictive (-00 §3). Anything else cannot be compared.
+            if not (_is_finite_number(c.get("value")) and _is_finite_number(p.get("value"))):
+                raise Reject(step, "constraint_unevaluable")
+            if c["value"] > p["value"]:
+                raise Reject(step, "delegated_constraint_relaxed")
         if ctype in ALLOWLIST_CONSTRAINTS and not set(c.get("value", [])).issubset(set(p.get("value", []))):
             raise Reject(step, "delegated_allowlist_not_subset")
 

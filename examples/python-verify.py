@@ -264,7 +264,13 @@ def _is_finite_number(v) -> bool:
     """A JSON number the upper bound comparison can order. bool is excluded
     because Python counts True as 1, and NaN and the infinities are excluded
     because JSON has no such values and NaN compares false with everything."""
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, int):
+        # Every int is finite. math.isfinite would convert it to float first and
+        # raise OverflowError on a very large one, such as 10**400 from json.loads.
+        return True
+    return isinstance(v, float) and math.isfinite(v)
 
 
 def _json_equal(a, b) -> bool:

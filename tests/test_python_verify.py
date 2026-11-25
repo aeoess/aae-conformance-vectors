@@ -16,6 +16,7 @@ Run from the repository root:
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 
 import pytest
@@ -549,8 +550,12 @@ def _rate(value) -> dict:
     (float("inf"), 10, "constraint_unevaluable"),
     (10, "5", "constraint_unevaluable"),
     (10, None, "constraint_unevaluable"),
+    # json.loads gives an int too large for float; it must compare, not raise
+    (10, json.loads("1" + "0" * 400), "delegated_constraint_relaxed"),
+    (json.loads("1" + "0" * 400), 5, None),
 ], ids=["lower", "equal", "float-equal", "higher", "child-true", "parent-true",
-        "child-nan", "child-minus-inf", "parent-inf", "child-string", "child-null"])
+        "child-nan", "child-minus-inf", "parent-inf", "child-string", "child-null",
+        "child-huge-int", "parent-huge-int"])
 def test_rate_limit_value_must_be_a_finite_number(parent_value, child_value, reason):
     """The upper bound comparison only works on finite numbers. A boolean,
     NaN, an infinity, a string or null cannot be shown to be equal or more

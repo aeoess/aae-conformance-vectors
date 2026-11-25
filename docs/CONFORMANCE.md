@@ -51,12 +51,13 @@ rejection occurs, or the last step reached for an acceptance.
 | 20-delegation-unrecognized-differs | REJECT | 9 | §3, §5.9 | A parent and child that differ in an unrecognized constraint type are rejected, even with `required:false`. |
 | 21-delegation-rate-limit-relaxation | REJECT | 9 | §3, §5.9 | A delegated `rate_limit` value above the parent's, in the same window, is rejected. |
 | 22-delegation-required-downgraded | REJECT | 9 | §3, §5.9 | A required parent constraint kept in the child but marked `required:false` is rejected. |
+| 23-delegation-unrecognized-differs-intermediate | REJECT | 9 | §3, §5.9 | In a three-link chain, an unrecognized constraint value that changes only on the middle link is rejected. Every link is checked, not only the presented one. |
 
 ## Reference implementation
 
 `examples/python-verify.py` implements the Section 5 algorithm, including real
-EdDSA signature verification against the DID-document fixtures. It passes all 22
-vectors (`22/22`). Its `19/19` on vectors 01-19 is the reference-implementation
+EdDSA signature verification against the DID-document fixtures. It passes all 23
+vectors (`23/23`). Its `19/19` on vectors 01-19 is the reference-implementation
 pass for vector set v1.7.0.
 
 Step 9 walks the chain the way -02 §5 step 9 describes it: the supplied
@@ -119,10 +120,12 @@ Codes not used by any vector:
 - `delegation_rate_limit_window_mismatch` — a delegated `rate_limit` whose `window`
   differs from the parent's (-00 §3). The name is provisional.
 
-New in #17, used by vector 20: `delegated_unrecognized_constraint_differs` — a
+New in #17, used by vectors 20 and 23: `delegated_unrecognized_constraint_differs` — a
 constraint type the verifier does not recognize is present in parent and child with
-different contents, so the verifier cannot determine that the child is equal to or
-more restrictive (-00 §3). The name is provisional. Vector 21 uses
+different values, so the verifier cannot determine that the child is equal to or
+more restrictive (-00 §3). The `required` member is not part of the value: -00 §2.3
+defines it, so a change from `required: false` to `required: true` is a known
+tightening and passes this check. The name is provisional. Vector 21 uses
 `delegated_constraint_relaxed` and vector 22 `required_parent_constraint_dropped`.
 
 A rejection may carry an optional `detail` string next to `rejection_reason`, for

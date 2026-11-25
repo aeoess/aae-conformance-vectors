@@ -378,7 +378,11 @@ def test_root_aae_accept_names_its_own_issuer():
     ("21-delegation-rate-limit-relaxation.json", "delegated_constraint_relaxed"),
     # -00 §3: a required parent constraint MUST NOT be changed to required: false.
     ("22-delegation-required-downgraded.json", "required_parent_constraint_dropped"),
-], ids=["unrecognized-differs", "rate-limit-relaxed", "required-downgraded"])
+    # -00 §5 step 9: monotonicity holds "for each delegation link", so a change
+    # on the middle link of a three-link chain is rejected too.
+    ("23-delegation-unrecognized-differs-intermediate.json", "delegated_unrecognized_constraint_differs"),
+], ids=["unrecognized-differs", "rate-limit-relaxed", "required-downgraded",
+        "unrecognized-differs-intermediate"])
 def test_issue17_vector_rejected_at_step9(filename, reason):
     import json
 
@@ -418,5 +422,121 @@ def test_issue17_controls_accept(root_constraints, child_constraints):
     """The #17 checks reject only the relaxations: these narrowings pass."""
     child_jws, chain = _chain(root_constraints=root_constraints, child_constraints=child_constraints)
     got = verifier.verify(child_jws, _context(delegation_chain=chain))
+    assert got == {"result": "ACCEPT", "verification_step": 9, "rejection_reason": None,
+                   "root_issuer": bv.REGISTRY}
+
+
+# --- `required` on an unrecognized constraint, per link ------------------------
+#
+# -00 §2.3 defines `required` (absent means true), and -00 §3 lets a delegated
+# AAE keep or tighten it but never change a required parent constraint to
+# required: false. So only the value of an unrecognized constraint has to match
+# exactly. Changing `required` from false to true is a known tightening.
+
+def _resource(required=None, value="repo:acme/*") -> dict:
+    out = {"value": value}
+    if required is not None:
+        out["required"] = required
+    return out
+
+
+def _resource_chain(resources: list[dict]) -> tuple[list[dict], list[str]]:
+    """registry -> agent-a -> agent-b -> agent-c -> agent-001, cut to len(resources)
+    AAEs. resources[i] is the 'resource' constraint of AAE i (0 = root).
+    Returns (vcs, jws) in root-first order."""
+    subjects = [bv.AGENT_A, bv.AGENT_B, bv.AGENT_C, bv.AGENT_001]
+    keys = [bv.REGISTRY_KEY, bv.AGENT_A_KEY, bv.AGENT_B_KEY, bv.AGENT_C_KEY]
+    max_depth = len(resources) - 1
+    ids = [f"urn:uuid:7e571000-0000-4000-8000-0000000000{i:02d}" for i in range(len(resources))]
+    vcs, jws = [], []
+    for i, resource in enumerate(resources):
+        constraints = {"max_transaction_value": bv.max_tx(500 - 100 * i, "USD"), "resource": resource}
+        validity = {"not_before": bv.NB, "not_after": bv.NA, "single_use": False}
+        if i == 0:
+            aae = {"mandate": bv.root_mandate(["read"], delegation_policy={"max_depth": max_depth}),
+                   "constraints": constraints, "validity": validity}
+            issuer = bv.REGISTRY
+        else:
+            aae = {"mandate": {"actions": ["read"], "delegation": {
+                       "delegator_did": subjects[i - 1], "delegator_aae_id": ids[i - 1],
+                       "delegator_aae_uri": "https://aae.example/p/" + ids[i - 1],
+                       "depth": i, "max_depth": max_depth}},
+                   "constraints": constraints, "validity": validity}
+            issuer = subjects[i - 1]
+        vc = bv.vc(ids[i], issuer, subjects[i], aae)
+        vcs.append(vc)
+        jws.append(bv.sign_jws(vc, keys[i]))
+    return vcs, jws
+
+
+def _link_result(child_vc: dict, parent_vc: dict) -> str | None:
+    try:
+        verifier.check_link(child_vc, parent_vc)
+    except verifier.Reject as r:
+        assert r.step == 9
+        return r.reason
+    return None
+
+
+@pytest.mark.parametrize("parent, child, reason", [
+    # value equal, required false -> true: a known tightening
+    (_resource(False), _resource(True), None),
+    # value equal, required false -> absent (treated as true, -00 §2.3)
+    (_resource(False), _resource(None), None),
+    # value equal, required true kept
+    (_resource(True), _resource(True), None),
+    # value differs, even with the tightening
+    (_resource(False), _resource(True, "repo:acme/colmena"), "delegated_unrecognized_constraint_differs"),
+    # value differs, required unchanged
+    (_resource(False), _resource(False, "repo:acme/colmena"), "delegated_unrecognized_constraint_differs"),
+    # required true -> false: a downgrade
+    (_resource(True), _resource(False), "required_parent_constraint_dropped"),
+    # required absent (true) -> false: a downgrade
+    (_resource(None), _resource(False), "required_parent_constraint_dropped"),
+], ids=["tighten-false-to-true", "tighten-false-to-absent", "required-kept",
+        "value-differs-tightened", "value-differs", "downgrade-true-to-false",
+        "downgrade-absent-to-false"])
+def test_unrecognized_constraint_required_per_link(parent, child, reason):
+    vcs, _ = _resource_chain([parent, child])
+    assert _link_result(vcs[1], vcs[0]) == reason
+
+
+def test_unrecognized_tightening_on_middle_link_passes_every_link():
+    """A three-link chain where only the middle link (depth 1 -> depth 2)
+    changes `required` from false to true. check_link accepts every link,
+    so the rule applies per link and not only at the presented AAE."""
+    vcs, _ = _resource_chain([_resource(False), _resource(False), _resource(True), _resource(True)])
+    assert [_link_result(vcs[i + 1], vcs[i]) for i in range(3)] == [None, None, None]
+
+
+@pytest.mark.parametrize("resources", [
+    [_resource(False), _resource(True)],
+    [_resource(False), _resource(None)],
+    [_resource(False), _resource(False), _resource(True), _resource(True)],
+    [_resource(False), _resource(False), _resource(True), _resource(None)],
+], ids=["leaf-true", "leaf-absent", "middle-then-leaf-true", "middle-then-leaf-absent"])
+def test_unrecognized_required_still_rejected_at_step7(resources):
+    """-00 §2.3 and §5 step 7: an unrecognized constraint that is not marked
+    required: false rejects the presented AAE. After a tightening, -00 §3 makes
+    every later AAE carry the constraint as required, so the presented AAE is
+    rejected at step 7 before the chain is walked."""
+    _, jws = _resource_chain(resources)
+    got = verifier.verify(jws[-1], _context(delegation_chain=jws[:-1]))
+    assert got == _reject(7, "unrecognized_required_constraint")
+
+
+def test_unrecognized_tightening_then_downgrade_rejected_at_step9():
+    """Tightened on the middle link, then changed back to required: false on
+    the presented AAE. Step 7 ignores it, and step 9 rejects the downgrade."""
+    _, jws = _resource_chain([_resource(False), _resource(False), _resource(True), _resource(False)])
+    got = verifier.verify(jws[-1], _context(delegation_chain=jws[:-1]))
+    assert got == _reject(9, "required_parent_constraint_dropped")
+
+
+def test_unrecognized_optional_chain_control_accepts():
+    """Control: the same three-link chain with required: false and the same
+    value everywhere is accepted."""
+    _, jws = _resource_chain([_resource(False)] * 4)
+    got = verifier.verify(jws[-1], _context(delegation_chain=jws[:-1]))
     assert got == {"result": "ACCEPT", "verification_step": 9, "rejection_reason": None,
                    "root_issuer": bv.REGISTRY}

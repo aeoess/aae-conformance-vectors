@@ -11,9 +11,11 @@ described under "Release history" in [README.md](README.md#versioning).
   rules were not enforced on a delegation link, so a chain that broke one of them was
   accepted (#17).
   - A constraint type the verifier does not recognize, present in parent and child with
-    different contents, now rejects with the new code
+    different values, now rejects with the new code
     `delegated_unrecognized_constraint_differs`. The verifier cannot determine that the
-    child is equal to or more restrictive.
+    child is equal to or more restrictive. The `required` member is compared by the
+    -00 §3 required rule, not as part of the value, so a change from `required: false`
+    to `required: true` passes this check. The check runs on every link of the chain.
   - A delegated `rate_limit` above the parent's value now rejects with
     `delegated_constraint_relaxed`. One whose `window` differs from the parent's rejects
     with the new code `delegation_rate_limit_window_mismatch`.
@@ -22,10 +24,11 @@ described under "Release history" in [README.md](README.md#versioning).
 
 ### Added
 
-- Native vectors 20 to 22: `20-delegation-unrecognized-differs`,
-  `21-delegation-rate-limit-relaxation`, `22-delegation-required-downgraded`. All three
-  are REJECT at step 9, `structural`, and cite -00 only. The native family now has 22
-  vectors; all runner runs need 90/90.
+- Native vectors 20 to 23: `20-delegation-unrecognized-differs`,
+  `21-delegation-rate-limit-relaxation`, `22-delegation-required-downgraded`,
+  `23-delegation-unrecognized-differs-intermediate`. All four are REJECT at step 9,
+  `structural`, and cite -00 only. The native family now has 23 vectors; all runner
+  runs need 91/91.
 
 ### Changed
 

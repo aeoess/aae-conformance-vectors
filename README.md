@@ -3,7 +3,7 @@
 Test vectors for the Agent Authorization Envelope (AAE) Internet-Draft. Each
 vector set is built against one published revision:
 
-- native, `vectors/` (22, the delegation and revocation cases among them):
+- native, `vectors/` (23, the delegation and revocation cases among them):
   [draft-kroehl-agentic-trust-aae-00](https://datatracker.ietf.org/doc/draft-kroehl-agentic-trust-aae/00/)
 - composition, `interop/*/vectors/` (6):
   [draft-kroehl-agentic-trust-aae-00](https://datatracker.ietf.org/doc/draft-kroehl-agentic-trust-aae/00/)
@@ -29,7 +29,7 @@ Each vector specifies an input AAE (a signed JWS in compact serialization) and
 the expected verifier result, with a reference to the section of the draft that
 governs the case.
 
-Coverage of the 22 vectors:
+Coverage of the 23 vectors:
 
 | # | Vector | Result | Step | Mode | Draft section |
 |---|--------|--------|------|------|---------------|
@@ -55,6 +55,7 @@ Coverage of the 22 vectors:
 | 20 | Delegation changes an unrecognized constraint | REJECT | 9 | structural | §3, §5 step 9 |
 | 21 | Delegation relaxes a rate_limit | REJECT | 9 | structural | §3, §5 step 9 |
 | 22 | Delegation downgrades a required constraint | REJECT | 9 | structural | §3, §5 step 9 |
+| 23 | Unrecognized constraint changed on an intermediate link | REJECT | 9 | structural | §3, §5 step 9 |
 
 See [docs/CONFORMANCE.md](docs/CONFORMANCE.md) for the full vector-to-section
 mapping and the rationale per case.
@@ -66,7 +67,7 @@ mapping and the rationale per case.
 3. For each vector, compare your verifier's output against the `expected` field:
    `result` (ACCEPT or REJECT) and, for rejections, the `verification_step` at
    which the algorithm stops.
-4. To claim conformance against draft-kroehl-agentic-trust-aae-00, all 22
+4. To claim conformance against draft-kroehl-agentic-trust-aae-00, all 23
    vectors must match.
 
 A reference verifier is provided in
@@ -79,7 +80,7 @@ vectors pass.
 $ python3 examples/python-verify.py
 PASS  01-valid-root-aae.json                     ACCEPT @ step 7
 ...
-22/22 vectors passed
+23/23 vectors passed
 ```
 
 Requirements: Python 3.9+ and the `cryptography` package
@@ -103,7 +104,7 @@ covers writing the adapter (skeletons in Python and JavaScript under
 digest from the input, and which conformance claim a result supports. The wire format is
 [docs/RUNNER-PROTOCOL.md](docs/RUNNER-PROTOCOL.md). CI runs both runners against
 [`adapters/python-reference/`](adapters/python-reference/), the reference verifiers behind
-the protocol, and requires 90/90 from each.
+the protocol, and requires 91/91 from each.
 
 ## Resume scenarios
 
@@ -137,7 +138,7 @@ rather than one widened one:
 
 | Schema | Governs | Input | Answers |
 |---|---|---|---|
-| [`vector-schema.json`](schema/vector-schema.json) | the 22 native vectors in `vectors/` | one JWS plus context | ACCEPT / REJECT at a numbered §5 step |
+| [`vector-schema.json`](schema/vector-schema.json) | the 23 native vectors in `vectors/` | one JWS plus context | ACCEPT / REJECT at a numbered §5 step |
 | [`enforce-vector-schema.json`](schema/enforce-vector-schema.json) | `vectors/enforce/` | a mandate plus a transaction, or a record plus an authority proof | PERMIT / DENY / PENDING, or RATIFIED / REJECTED, with a recomputable core digest |
 | [`interop-composition-vector-schema.json`](schema/interop-composition-vector-schema.json) | `interop/*/vectors/` | one AAE plus one artifact from another profile | eight staged rows |
 
@@ -275,7 +276,7 @@ vector states the revision it was built against in its own `section_ref`:
 
 | Family | Count | Tracks |
 |---|---|---|
-| native, `vectors/` | 22 | draft-kroehl-agentic-trust-aae-00 |
+| native, `vectors/` | 23 | draft-kroehl-agentic-trust-aae-00 |
 | composition, `interop/*/vectors/` | 6 | draft-kroehl-agentic-trust-aae-00 + draft-yossif-psea-02 |
 | enforce, `vectors/enforce/` | 26 | draft-kroehl-agentic-trust-aae-02, enforce kernel 3.0 |
 | resume, `vectors/resume/` | 42 | draft-kroehl-agentic-trust-aae-02 (39 native requests, 3 enforce kernel 3.0) |
@@ -314,7 +315,7 @@ itself as parent was accepted. A missing parent now rejects with the new code
 envelopes off the path are ignored, and an ACCEPT carries the optional field
 `root_issuer`. Four native vectors, 16 to 19, cover the cases. Vectors 01 to 15 and their
 expected results are unchanged. See [CHANGELOG.md](CHANGELOG.md).
-Unreleased (#17): three native vectors, 20 to 22, for -00 §3 rules the reference verifier
+Unreleased (#17): four native vectors, 20 to 23, for -00 §3 rules the reference verifier
 did not enforce at step 9. See [CHANGELOG.md](CHANGELOG.md).
 
 *(This section read "1.1.0" until v1.3.0 while the v1.2.0 tag already existed. The line was

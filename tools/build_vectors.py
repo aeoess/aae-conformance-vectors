@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the 22 AAE conformance vectors.
+"""Build the 23 AAE conformance vectors.
 
 Loads the committed test keys (tools/genkeys.py), constructs an AAE Verifiable
 Credential for each vector, signs it as a JWS in compact serialization, and
@@ -95,6 +95,7 @@ def max_tx(value: int, currency: str = "USD", required: bool = True) -> dict:
 REGISTRY_KEY = load_key("issuer-test-key-1.json")
 AGENT_A_KEY = load_key("agent-a-key.json")
 AGENT_B_KEY = load_key("agent-b-key.json")
+AGENT_C_KEY = load_key("agent-c-key.json")
 
 
 def root_mandate(actions, delegation_policy=None):
@@ -786,6 +787,52 @@ def vectors():
         "rationale": "Section 3 requires every parent constraint marked required:true to be present in the delegated AAE and either marked required:true or omit the required member, and states that a delegated AAE MUST NOT omit, downgrade, or change to required:false any such constraint. The child carries max_transaction_value with required:false, so it is rejected at step 9 even though the constraint is not absent.",
     })
 
+    # 23 — unrecognized constraint changed on the middle link of a three-link chain (REJECT)
+    # registry -> agent-a (root, depth 0) -> agent-b (depth 1) -> agent-c (depth 2) -> agent-001 (depth 3).
+    # The value changes on the middle link (depth 1 -> depth 2). The first link and the
+    # presented link (depth 2 -> depth 3) keep it unchanged.
+    def link23(vc_id, delegator, subject, parent_id, depth, actions, cap, resource):
+        return vc(vc_id, delegator, subject, {
+            "mandate": {
+                "actions": actions,
+                "delegation": {
+                    "delegator_did": delegator, "delegator_aae_id": parent_id,
+                    "delegator_aae_uri": "https://aae.example/p/" + parent_id,
+                    "depth": depth, "max_depth": 3,
+                },
+            },
+            "constraints": {
+                "max_transaction_value": max_tx(cap, "USD"),
+                "resource": {"value": resource, "required": False},
+            },
+            "validity": {"not_before": NB, "not_after": NA, "single_use": False},
+        })
+    root23_id = "urn:uuid:00000017-0000-4000-8000-0000000000a0"
+    d1_23_id = "urn:uuid:00000017-0000-4000-8000-0000000000b1"
+    d2_23_id = "urn:uuid:00000017-0000-4000-8000-0000000000c2"
+    root23 = vc(root23_id, REGISTRY, AGENT_A, {
+        "mandate": root_mandate(["read", "book"], delegation_policy={"max_depth": 3}),
+        "constraints": {
+            "max_transaction_value": max_tx(500, "USD"),
+            "resource": {"value": "repo:acme/*", "required": False},
+        },
+        "validity": {"not_before": NB, "not_after": NA, "single_use": False},
+    })
+    d1_23 = link23(d1_23_id, AGENT_A, AGENT_B, root23_id, 1, ["read", "book"], 400, "repo:acme/*")
+    d2_23 = link23(d2_23_id, AGENT_B, AGENT_C, d1_23_id, 2, ["read"], 300, "repo:acme/colmena")  # differs from d1
+    d3_23 = link23("urn:uuid:00000017-0000-4000-8000-000000000017", AGENT_C, AGENT_001, d2_23_id, 3,
+                   ["read"], 100, "repo:acme/colmena")  # same as d2
+    out.append({
+        "id": "aae-vector-23",
+        "name": "Unrecognized constraint changed on an intermediate link — reject",
+        "description": "Three-link chain registry -> agent-a -> agent-b -> agent-c -> agent-001. Every AAE carries the unrecognized constraint type 'resource' with required:false. The value is repo:acme/* in the root and the depth-1 AAE, and repo:acme/colmena in the depth-2 AAE and the presented depth-3 AAE.",
+        "section_ref": "draft-kroehl-agentic-trust-aae-00 §3 (equal to or more restrictive), §5 step 9",
+        "input": {"secured_aae": sign_jws(d3_23, AGENT_C_KEY), "context": step9_context(
+            [sign_jws(root23, REGISTRY_KEY), sign_jws(d1_23, AGENT_A_KEY), sign_jws(d2_23, AGENT_B_KEY)])},
+        "expected": {"result": "REJECT", "verification_step": 9, "rejection_reason": "delegated_unrecognized_constraint_differs"},
+        "rationale": "Step 9 requires constraint monotonicity as defined in Section 3 to hold for each delegation link, not only the link to the presented AAE. The presented link (depth 2 -> depth 3) and the first link (root -> depth 1) keep the 'resource' value unchanged. The middle link (depth 1 -> depth 2) changes it from repo:acme/* to repo:acme/colmena. 'resource' is unrecognized and marked required:false, so step 7 ignores it on the presented AAE, and Section 3 defines no comparison for it. The relying party cannot determine that the depth-2 value is equal to or more restrictive than the depth-1 value, so the chain is rejected at step 9.",
+    })
+
     return out
 
 
@@ -814,6 +861,7 @@ def main() -> None:
         "aae-vector-20": "20-delegation-unrecognized-differs.json",
         "aae-vector-21": "21-delegation-rate-limit-relaxation.json",
         "aae-vector-22": "22-delegation-required-downgraded.json",
+        "aae-vector-23": "23-delegation-unrecognized-differs-intermediate.json",
     }
     # verification_mode (#2, enum runtime|structural). Rule: runtime = the
     # determining check consults live external state (clock for §2.4 validity,
@@ -843,6 +891,7 @@ def main() -> None:
         "aae-vector-20": "structural",  # step 9 unrecognized constraint differs — document compare
         "aae-vector-21": "structural",  # step 9 rate_limit relaxed — document compare
         "aae-vector-22": "structural",  # step 9 required constraint downgraded — document compare
+        "aae-vector-23": "structural",  # step 9 unrecognized constraint differs on a middle link — document compare
     }
     for v in vectors():
         v["verification_mode"] = mode[v["id"]]

@@ -254,6 +254,11 @@ def effective_max_depth(vc: dict) -> int | None:
     return policy.get("max_depth") if policy else None
 
 
+def _without_required(constraint: dict) -> dict:
+    """The constraint value with the `required` member removed."""
+    return {k: v for k, v in constraint.items() if k != "required"}
+
+
 def check_link(child_vc: dict, parent_vc: dict, step: int = 9,
                child_node: int | None = None, parent_node: int | None = None) -> None:
     """§3 monotonicity + depth rules for one delegation link.
@@ -324,11 +329,14 @@ def check_link(child_vc: dict, parent_vc: dict, step: int = 9,
         p = pc.get(ctype)
         if p is None:
             continue
-        # "where a constraint type is unrecognized and parent and child differ
-        # in it, the relying party MUST reject the chain rather than assume the
-        # difference is narrowing" (-02 §5 step 9; -00 §3: narrowing that
-        # cannot be determined MUST be rejected).
-        if ctype not in RECOGNIZED_CONSTRAINTS and c != p:
+        # "If a relying party cannot determine whether a delegated element is
+        # equal to or more restrictive than the corresponding parent element,
+        # the delegated AAE MUST be rejected" (-00 §3). For an unrecognized
+        # type only an identical value is known to be equal, so everything
+        # except `required` must match. `required` itself is defined by -00
+        # §2.3, so changing it from false to true is a known tightening. The
+        # opposite change is rejected above as required_parent_constraint_dropped.
+        if ctype not in RECOGNIZED_CONSTRAINTS and _without_required(c) != _without_required(p):
             raise Reject(step, "delegated_unrecognized_constraint_differs")
         if ctype in CURRENCY_VALUED and c.get("currency") != p.get("currency"):
             raise Reject(step, "delegation_currency_mismatch")
